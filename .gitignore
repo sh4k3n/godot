@@ -396,3 +396,9 @@ $RECYCLE.BIN/
 *.msp
 *.lnk
 *.generated.props
+
+# fastbuild command lines: absolute paths + one specific build config.
+# Regenerate per checkout, see tools/fastbuild/README.md
+tools/fastbuild/*.line
+tools/fastbuild/_run_*.bat
+custom.py
