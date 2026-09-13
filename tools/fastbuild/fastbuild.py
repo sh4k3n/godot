@@ -214,6 +214,47 @@ def newest_header_mtime():
     return newest
 
 
+def lib_command():
+    """The archive line, with its object list rebuilt from the sources on disk.
+
+    lib.line is captured once and freezes whatever files existed at capture
+    time. That silently breaks twice: a source added later is compiled but
+    never archived, so the link fails with unresolved symbols; and a source
+    deleted later leaves an orphaned .obj that keeps getting archived, so dead
+    code links in and stale symbols resolve. Both happened during plan 05.
+
+    Rebuilding the list from os.listdir - the same source of truth compilation
+    already uses - makes adding and deleting files just work, and keeps the
+    captured line for what it is actually needed for: the tool path and flags.
+    """
+    template = read_line("lib.line")
+
+    objs = []
+    for name in sorted(os.listdir(GAME_DIR)):
+        if name.endswith(".cpp"):
+            objs.append(os.path.join("bin", "obj", "external", "game", name[:-4] + OBJ_SUFFIX))
+
+    # Keep everything up to and including /OUT:..., replace the object list.
+    match = re.search(r"/OUT:\S+", template)
+    if match is None:
+        return template
+    return template[: match.end()] + " " + " ".join(objs)
+
+
+def orphan_objects():
+    """Objects in the obj dir with no matching .cpp - left by a deleted source."""
+    sources = {name[:-4] for name in os.listdir(GAME_DIR) if name.endswith(".cpp")}
+    orphans = []
+    if not os.path.isdir(OBJ_DIR):
+        return orphans
+    for name in os.listdir(OBJ_DIR):
+        if not name.endswith(OBJ_SUFFIX):
+            continue
+        if name[: -len(OBJ_SUFFIX)] not in sources:
+            orphans.append(os.path.join(OBJ_DIR, name))
+    return orphans
+
+
 def stale_sources():
     header_mtime = newest_header_mtime()
     stale = []
@@ -228,12 +269,23 @@ def stale_sources():
 
 
 def fast_build():
+    # A deleted source leaves its .obj behind; archiving it would link dead
+    # code and resolve symbols that should be gone.
+    orphans = orphan_objects()
+    for path in orphans:
+        print("dropping orphaned object: %s" % os.path.basename(path))
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
     stale = stale_sources()
-    if not stale:
+    if not stale and not orphans:
         print("nothing to do")
         return
 
-    print("compiling: %s" % ", ".join(stale))
+    if stale:
+        print("compiling: %s" % ", ".join(stale))
     cl_template = read_line("cl.line")
 
     compiles = []
@@ -246,8 +298,8 @@ def fast_build():
         cmd = re.sub(r"\S+\.cpp", lambda m: src, cmd, count=1)
         compiles.append(cmd)
 
-    t_cl = run_batch(compiles, "cl")
-    t_lib = run_batch([read_line("lib.line")], "lib")
+    t_cl = run_batch(compiles, "cl") if compiles else 0.0
+    t_lib = run_batch([lib_command()], "lib")
     t_link = run_batch([read_line("link.line")], "link")
     drop_stale_console_exe()
     print(
