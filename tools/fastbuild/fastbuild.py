@@ -51,7 +51,14 @@ CMD_DIR = os.path.dirname(os.path.abspath(__file__))
 # The SCons invocation this tree is configured for. Everything else (custom
 # modules, SDK paths, module trims) lives in custom.py, which SCons reads on
 # its own, so it must not be duplicated here.
-SCONS_ARGS = "platform=windows target=editor arch=x86_64 d3d12=yes"
+#
+# debug_symbols IS the exception and has to be here. SConstruct:561 assigns it
+# through methods.get_cmdline_bool, which reads SCons' ARGUMENTS only, so
+# custom.py cannot set it - the value there is overwritten by the dev_build
+# default before any flag is chosen, silently. Without it on this line a
+# recapture writes a cl.line with no /Zi, objects stop carrying line numbers,
+# and Visual Studio breakpoints quietly stop binding again.
+SCONS_ARGS = "platform=windows target=editor arch=x86_64 d3d12=yes debug_symbols=yes"
 
 VCVARS_CANDIDATES = [
     r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat",
@@ -189,6 +196,11 @@ def capture():
         )
 
     # Incremental linking: see the module docstring for why /OPT:REF must go.
+    #
+    # /DEBUG:FULL is what debug_symbols=yes produces, and it is left alone
+    # rather than downgraded: it is the mode that gets breakpoints binding, and
+    # it is compatible with /INCREMENTAL. Only /DEBUG:NONE needs rewriting,
+    # which is what a build WITHOUT debug_symbols emits.
     link = link.replace("/INCREMENTAL:NO", "/INCREMENTAL")
     link = link.replace("/DEBUG:NONE", "/DEBUG")
     link = link.replace(" /OPT:REF", "").replace(" /OPT:NOICF", "")
