@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 """Direct compile+link fast path for the game module, bypassing SCons.
 
-SCons spends ~14 s per invocation walking its 18,889-node graph in Python
-before it can decide anything. For the common case - editing a file in the
-game module - that is pure overhead. This script replays the exact cl / lib /
-link command lines SCons itself emits, selecting work by mtime instead of by
-dependency graph. A game-module edit goes from ~18 s to ~7 s.
+SCons spends most of an incremental build walking its dependency graph in
+Python before it can decide anything. For the common case - editing a file in
+the game module - that is pure overhead. This script replays the exact cl / lib
+/ link command lines SCons itself emits, selecting work by mtime instead of by
+dependency graph. Timings are recorded in plans/02-build-optimization.md.
 
     python tools/fastbuild/fastbuild.py
 
@@ -18,10 +18,9 @@ first one is just slow.
     --capture   re-capture the command lines without building
 
 link.line is post-processed for incremental linking: /INCREMENTAL instead of
-/INCREMENTAL:NO, /DEBUG instead of /DEBUG:NONE, and /OPT:REF + /OPT:NOICF
-removed. /OPT:REF is whole-image dead-code elimination, which silently
-defeats incremental linking; dropping it takes the link from 6.7 s to 1.5 s
-at the cost of a larger binary.
+/INCREMENTAL:NO, /DEBUG:NONE rewritten, and /OPT:REF + /OPT:NOICF removed.
+/OPT:REF is whole-image dead-code elimination, which silently defeats
+incremental linking, at the cost of a larger binary.
 
 LIMITATIONS - this is a narrow tool, not a build system:
 
@@ -31,9 +30,10 @@ LIMITATIONS - this is a narrow tool, not a build system:
   * Header dependencies are tracked only inside the game module: any .h
     there newer than an .obj rebuilds that .obj. A voxel or core header
     change is invisible here.
-  * The command lines are frozen at capture time. Adding a source file to the
-    game module, changing build options, or upgrading the engine needs a
-    re-capture (--capture, or delete the .line files).
+  * The command lines are frozen at capture time, so changing build options
+    or upgrading the engine needs a re-capture (--capture, or delete the .line
+    files). Adding or deleting a game source does NOT: the archive step reads
+    the source list off disk - see lib_command.
 
 When in doubt, use --scons. It is slow but it is correct.
 """
@@ -52,7 +52,7 @@ CMD_DIR = os.path.dirname(os.path.abspath(__file__))
 # modules, SDK paths, module trims) lives in custom.py, which SCons reads on
 # its own, so it must not be duplicated here.
 #
-# debug_symbols IS the exception and has to be here. SConstruct:561 assigns it
+# debug_symbols IS the exception and has to be here. SConstruct assigns it
 # through methods.get_cmdline_bool, which reads SCons' ARGUMENTS only, so
 # custom.py cannot set it - the value there is overwritten by the dev_build
 # default before any flag is chosen, silently. Without it on this line a
@@ -90,8 +90,16 @@ def find_vcvars():
     )
 
 
-def run_batch(commands, label, echo=False):
-    """Run commands in one vcvars-initialised shell. Returns elapsed seconds."""
+def run_batch(commands, label, echo=True):
+    """Run commands in one vcvars-initialised shell. Returns elapsed seconds.
+
+    Output always streams. MSVC writes diagnostics as path(line): error CXXXX,
+    which Visual Studio parses into clickable error-list entries; capturing the
+    stream delivers the IDE nothing and the build appears to fail silently.
+
+    Every call pays for vcvars64.bat, which dominates a short build, so callers
+    batch their commands into one call rather than one per tool.
+    """
     script = '@echo off\r\ncall "%s" >nul\r\n' % find_vcvars()
     for command in commands:
         script += command + "\r\nif errorlevel 1 exit /b 1\r\n"
@@ -100,18 +108,9 @@ def run_batch(commands, label, echo=False):
         handle.write(script)
 
     started = time.time()
-    if echo:
-        # Stream output, so a 20-minute build is not a silent wait.
-        proc = subprocess.run(["cmd", "/c", bat], cwd=ROOT)
-        out = ""
-    else:
-        proc = subprocess.run(["cmd", "/c", bat], cwd=ROOT, capture_output=True, text=True)
-        out = proc.stdout
-
+    proc = subprocess.run(["cmd", "/c", bat], cwd=ROOT)
     elapsed = time.time() - started
     if proc.returncode != 0:
-        if out:
-            sys.stdout.write(out[-4000:])
         print("FAILED at %s after %.1fs" % (label, elapsed))
         sys.exit(1)
     return elapsed
@@ -285,7 +284,7 @@ def fast_build():
     # code and resolve symbols that should be gone.
     orphans = orphan_objects()
     for path in orphans:
-        print("dropping orphaned object: %s" % os.path.basename(path))
+        print("dropping orphaned object: %s" % os.path.basename(path), flush=True)
         try:
             os.remove(path)
         except OSError:
@@ -297,7 +296,9 @@ def fast_build():
         return
 
     if stale:
-        print("compiling: %s" % ", ".join(stale))
+        # Flushed because the child writes to the same console directly: without
+        # it Python's buffer lands after the compiler output it introduces.
+        print("compiling: %s" % ", ".join(stale), flush=True)
     cl_template = read_line("cl.line")
 
     compiles = []
@@ -310,14 +311,14 @@ def fast_build():
         cmd = re.sub(r"\S+\.cpp", lambda m: src, cmd, count=1)
         compiles.append(cmd)
 
-    t_cl = run_batch(compiles, "cl") if compiles else 0.0
-    t_lib = run_batch([lib_command()], "lib")
-    t_link = run_batch([read_line("link.line")], "link")
+    # One shell for compile, archive and link, because each run_batch pays for
+    # vcvars64.bat and that setup cost dominated the work it was wrapping. The
+    # price is per-stage timings; plans/02-build-optimization.md has the
+    # measurement.
+    commands = compiles + [lib_command(), read_line("link.line")]
+    total = run_batch(commands, "build")
     drop_stale_console_exe()
-    print(
-        "cl %.2fs  lib %.2fs  link %.2fs  TOTAL %.2fs"
-        % (t_cl, t_lib, t_link, t_cl + t_lib + t_link)
-    )
+    print("TOTAL %.2fs" % total)
 
 
 def drop_stale_console_exe():
