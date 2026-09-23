@@ -112,7 +112,14 @@ void JoltConcavePolygonShape3D::set_data(const Variant &p_data) {
 	const Variant maybe_back_face_collision = data.get("backface_collision", Variant());
 	ERR_FAIL_COND(maybe_back_face_collision.get_type() != Variant::BOOL);
 
-	faces = maybe_faces;
+	// The same data again - a resource re-pushing its state - must not throw away a shape already built, possibly
+	// built ahead of time on another thread.
+	const PackedVector3Array new_faces = maybe_faces;
+	if (new_faces == faces && (bool)maybe_back_face_collision == back_face_collision) {
+		return;
+	}
+
+	faces = new_faces;
 	back_face_collision = maybe_back_face_collision;
 
 	aabb = _calculate_aabb();

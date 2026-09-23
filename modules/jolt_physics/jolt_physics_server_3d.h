@@ -445,6 +445,10 @@ public:
 	JoltArea3D *get_area(RID p_rid) const { return area_owner.get_or_null(p_rid); }
 	JoltBody3D *get_body(RID p_rid) const { return body_owner.get_or_null(p_rid); }
 	JoltShape3D *get_shape(RID p_rid) const { return shape_owner.get_or_null(p_rid); }
+
+	// Builds the shape's Jolt representation now, on the calling thread, rather than lazily on whichever thread first
+	// attaches it to a body. Callable from any thread: the build is cached under the shape's lock.
+	void shape_prebuild(RID p_shape);
 	JoltJoint3D *get_joint(RID p_rid) const { return joint_owner.get_or_null(p_rid); }
 
 #ifdef DEBUG_ENABLED

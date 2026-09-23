@@ -812,7 +812,9 @@ void WorkerThreadPool::init(int p_thread_count, float p_low_priority_task_ratio)
 	runlevel = RUNLEVEL_NORMAL;
 
 	if (p_thread_count < 0) {
-		p_thread_count = OS::get_singleton()->get_default_thread_pool_size();
+		// One fewer than the CPUs: a thread that waits on a task runs tasks
+		// itself, so a pool of every CPU oversubscribes by the main thread.
+		p_thread_count = MAX(1, OS::get_singleton()->get_default_thread_pool_size() - 1);
 	}
 
 	max_low_priority_threads = CLAMP(p_thread_count * p_low_priority_task_ratio, 1, p_thread_count - 1);
