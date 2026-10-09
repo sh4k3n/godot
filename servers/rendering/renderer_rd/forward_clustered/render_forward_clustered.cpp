@@ -1565,10 +1565,9 @@ void RenderForwardClustered::_process_sscs(Ref<RenderSceneBuffersRD> p_render_bu
 		Transform3D light_transform = light_storage->light_instance_get_base_transform(light_instance);
 		Vector3 light_direction = inverse_transform.basis.xform(light_transform.basis.xform(Vector3(0, 0, 1))).normalized();
 
-		float opacity = light_storage->light_get_param(base, RSE::LIGHT_PARAM_CONTACT_SHADOW_OPACITY);
 		float blur = light_storage->light_get_param(base, RSE::LIGHT_PARAM_CONTACT_SHADOW_BLUR);
 
-		ss_effects->screen_space_contact_shadows(p_render_buffers, rb_data->ss_effects_data.sscs, settings, p_projections, light_direction, i, opacity, blur, p_taa_frame_count);
+		ss_effects->screen_space_contact_shadows(p_render_buffers, rb_data->ss_effects_data.sscs, settings, p_projections, light_direction, i, blur, p_taa_frame_count);
 	}
 }
 
@@ -4081,7 +4080,7 @@ RID RenderForwardClustered::_setup_sdfgi_render_pass_uniform_set(RID p_albedo_te
 	}
 	{
 		RD::Uniform u;
-		u.binding = 37;
+		u.binding = 38;
 		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 		RID instance_buffer = scene_shader.default_material_feedback_buffer;
 		u.append_id(instance_buffer);
@@ -4964,17 +4963,13 @@ void RenderForwardClustered::_update_dirty_geometry_instances() {
 void RenderForwardClustered::_update_dirty_geometry_pipelines() {
 	if (global_pipeline_data_required.key != global_pipeline_data_compiled.key) {
 		// Go through the entire list of surfaces and compile pipelines for everything again.
-		SelfList<GeometryInstanceSurfaceDataCache> *list = geometry_surface_compilation_all_list.first();
-		while (list != nullptr) {
-			GeometryInstanceSurfaceDataCache *surface_cache = list->self();
-			_mesh_generate_all_pipelines_for_surface_cache(surface_cache, global_pipeline_data_required);
+		for (GeometryInstanceSurfaceDataCache &surface_cache : geometry_surface_compilation_all_list) {
+			_mesh_generate_all_pipelines_for_surface_cache(&surface_cache, global_pipeline_data_required);
 
-			if (surface_cache->compilation_dirty_element.in_list()) {
+			if (surface_cache.compilation_dirty_element.in_list()) {
 				// Remove any elements from the dirty list as they don't need to be processed again.
-				geometry_surface_compilation_dirty_list.remove(&surface_cache->compilation_dirty_element);
+				geometry_surface_compilation_dirty_list.remove(&surface_cache.compilation_dirty_element);
 			}
-
-			list = list->next();
 		}
 
 		global_pipeline_data_compiled.key = global_pipeline_data_required.key;
