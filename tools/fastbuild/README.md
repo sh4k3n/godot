@@ -51,10 +51,18 @@ a larger binary and is worth it.
 
 ## Output
 
-Every stage runs in ONE vcvars-initialised shell, and its output streams rather
-than being captured. Both matter: `vcvars64.bat` costs more than the compiling
-and linking it wraps, and MSVC diagnostics only reach Visual Studio's error list
-as clickable entries if they actually arrive on the console.
+`vcvars64.bat` runs ONCE per build and its environment is reused by every
+tool, because it costs more than the compiling and linking it wraps.
+
+Stale sources compile in parallel, one `cl` per core, so a header edit that
+dirties the whole module no longer compiles on one core. The slowest files
+start first, ranked by their last compile time, which each build records in
+`bin/obj/external/game/fastbuild_times.json`; a file with no record goes to
+the front. Each file's output is
+printed whole when that file finishes, so diagnostics from different files
+never interleave; the archive and link stream. Either way every line reaches
+the console, which is all Visual Studio needs to turn MSVC's
+`path(line): error CXXXX` into a clickable entry.
 
 Section 5 of `../../../CLAUDE.md` covers the build paths and the dead ends;
 `plans/02-build-optimization.md` holds the measurements.

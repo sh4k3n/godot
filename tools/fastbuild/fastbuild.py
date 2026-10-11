@@ -39,11 +39,14 @@ When in doubt, use --scons. It is slow but it is correct.
 """
 
 import glob
+import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 CMD_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -76,6 +79,8 @@ GAME_DIR = os.path.abspath(
 BIN_DIR = os.path.join(ROOT, "bin")
 OBJ_DIR = os.path.join(ROOT, "bin", "obj", "external", "game")
 OBJ_SUFFIX = ".windows.editor.x86_64.obj"
+TIMES_FILE = os.path.join(OBJ_DIR, "fastbuild_times.json")
+ENV_FILE = os.path.join(OBJ_DIR, "fastbuild_env.txt")
 
 LINE_FILES = ("cl.line", "lib.line", "link.line")
 
@@ -114,6 +119,42 @@ def run_batch(commands, label, echo=True):
         print("FAILED at %s after %.1fs" % (label, elapsed))
         sys.exit(1)
     return elapsed
+
+
+def vcvars_env():
+    """The environment vcvars64.bat sets up, paid for once and shared by every tool run."""
+    bat = os.path.join(CMD_DIR, "_run_env.bat")
+    # Into a file, not a pipe: vcvars64.bat runs measurably slower with its stdout captured.
+    with open(bat, "w", encoding="utf-8") as handle:
+        handle.write('@echo off\r\ncall "%s" >nul\r\nset > "%s"\r\n' % (find_vcvars(), ENV_FILE))
+    subprocess.run(["cmd", "/c", bat])
+    with open(ENV_FILE, "r", encoding="oem", errors="replace") as handle:
+        lines = handle.read().splitlines()
+    return {k.upper(): v for k, v in (line.split("=", 1) for line in lines if "=" in line)}
+
+
+def tool_command(line, env):
+    tool, args = line.split(" ", 1)
+    exe = shutil.which(tool, path=env["PATH"])
+    if exe is None:
+        sys.exit("%s is not on the PATH vcvars64.bat sets up" % tool)
+    return '"%s" %s' % (exe, args)
+
+
+def compile_one(name, cmd, env):
+    started = time.time()
+    proc = subprocess.run(
+        cmd, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace"
+    )
+    return name, proc, time.time() - started
+
+
+def load_times():
+    try:
+        with open(TIMES_FILE, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return {}
 
 
 def lines_present():
@@ -299,7 +340,12 @@ def fast_build():
         # Flushed because the child writes to the same console directly: without
         # it Python's buffer lands after the compiler output it introduces.
         print("compiling: %s" % ", ".join(stale), flush=True)
-    cl_template = read_line("cl.line")
+    started = time.time()
+    env = vcvars_env()
+    cl_template = tool_command(read_line("cl.line"), env)
+    times = load_times()
+    # Slowest first by last build's timing, so no long file is left running alone at the end.
+    stale.sort(key=lambda name: times.get(name, float("inf")), reverse=True)
 
     compiles = []
     for name in stale:
@@ -309,14 +355,34 @@ def fast_build():
         # would otherwise read as escapes in the replacement string.
         cmd = re.sub(r"/Fo\S+", lambda m: "/Fo" + obj, cl_template, count=1)
         cmd = re.sub(r"\S+\.cpp", lambda m: src, cmd, count=1)
-        compiles.append(cmd)
+        compiles.append((name, cmd))
 
-    # One shell for compile, archive and link, because each run_batch pays for
-    # vcvars64.bat and that setup cost dominated the work it was wrapping. The
-    # price is per-stage timings; plans/02-build-optimization.md has the
-    # measurement.
-    commands = compiles + [lib_command(), read_line("link.line")]
-    total = run_batch(commands, "build")
+    # Each compile's output is printed whole, so parallel diagnostics never interleave.
+    ok = True
+    with ThreadPoolExecutor(os.cpu_count()) as pool:
+        jobs = [pool.submit(compile_one, name, cmd, env) for name, cmd in compiles]
+        for job in as_completed(jobs):
+            if job.cancelled():
+                continue
+            name, proc, seconds = job.result()
+            print(proc.stdout, end="", flush=True)
+            if proc.returncode == 0:
+                times[name] = seconds
+            else:
+                ok = False
+                # A broken header fails every file: stop the queue, let running compiles report.
+                # Not shutdown(cancel_futures=True): it drops queued jobs that as_completed then waits on forever.
+                for other in jobs:
+                    other.cancel()
+    if compiles:
+        with open(TIMES_FILE, "w", encoding="utf-8") as handle:
+            json.dump(times, handle, indent=1, sort_keys=True)
+    for line in (lib_command(), read_line("link.line")):
+        ok = ok and subprocess.run(tool_command(line, env), cwd=ROOT, env=env).returncode == 0
+    total = time.time() - started
+    if not ok:
+        print("FAILED at build after %.1fs" % total)
+        sys.exit(1)
     drop_stale_console_exe()
     print("TOTAL %.2fs" % total)
 
