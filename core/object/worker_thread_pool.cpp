@@ -737,6 +737,57 @@ void WorkerThreadPool::wait_for_group_task_completion(GroupID p_group) {
 		if (this == singleton) {
 			_unlock_unlockable_mutexes();
 		}
+
+		bool queued = false;
+		Callable callable;
+		void (*native_group_func)(void *, uint32_t) = nullptr;
+		void *native_func_userdata = nullptr;
+		BaseTemplateUserdata *template_userdata = nullptr;
+		task_mutex.lock();
+		for (SelfList<Task>::List *queue : { &task_queue, &low_priority_task_queue }) {
+			for (SelfList<Task> *E = queue->first(); E && !queued; E = E->next()) {
+				if (E->self()->group == group) {
+					queued = true;
+					callable = E->self()->callable;
+					native_group_func = E->self()->native_group_func;
+					native_func_userdata = E->self()->native_func_userdata;
+					template_userdata = E->self()->template_userdata;
+				}
+			}
+		}
+		task_mutex.unlock();
+
+		if (queued) {
+			bool safe_for_nodes_backup = is_current_thread_safe_for_nodes();
+			CallQueue *call_queue_backup = MessageQueue::get_singleton() != MessageQueue::get_main_singleton() ? MessageQueue::get_singleton() : nullptr;
+			set_current_thread_safe_for_nodes(false);
+			MessageQueue::set_thread_singleton_override(nullptr);
+
+			bool do_post = false;
+			for (uint32_t work_index = group->index.postincrement(); work_index < group->max; work_index = group->index.postincrement()) {
+				if (native_group_func) {
+					native_group_func(native_func_userdata, work_index);
+				} else if (template_userdata) {
+					template_userdata->callback_indexed(work_index);
+				} else {
+					callable.call(work_index);
+				}
+				if (group->completed_index.increment() == group->max) {
+					do_post = true;
+				}
+			}
+			if (do_post) {
+				if (template_userdata) {
+					memdelete(template_userdata);
+				}
+				group->done_semaphore.post();
+				group->completed.set_to(true);
+			}
+
+			set_current_thread_safe_for_nodes(safe_for_nodes_backup);
+			MessageQueue::set_thread_singleton_override(call_queue_backup);
+		}
+
 		group->done_semaphore.wait();
 		if (this == singleton) {
 			_lock_unlockable_mutexes();
