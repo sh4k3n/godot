@@ -1691,6 +1691,26 @@ bool JoltPhysicsServer3D::is_flushing_queries() const {
 	return flushing_queries;
 }
 
+void JoltPhysicsServer3D::space_step(RID p_space, real_t p_step) {
+	JoltSpace3D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL(space);
+	ERR_FAIL_COND(space->is_active());
+
+	job_system->pre_step();
+
+	space->step((float)p_step);
+
+	job_system->post_step();
+}
+
+void JoltPhysicsServer3D::space_flush_queries(RID p_space) {
+	JoltSpace3D *space = space_owner.get_or_null(p_space);
+	ERR_FAIL_NULL(space);
+	ERR_FAIL_COND(space->is_active());
+
+	space->call_queries();
+}
+
 int JoltPhysicsServer3D::get_process_info(PS3DE::ProcessInfo p_process_info) {
 	return 0;
 }

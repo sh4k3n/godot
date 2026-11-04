@@ -429,6 +429,9 @@ public:
 	virtual void flush_queries() override;
 	virtual bool is_flushing_queries() const override;
 
+	void space_step(RID p_space, real_t p_step);
+	void space_flush_queries(RID p_space);
+
 	virtual int get_process_info(PS3DE::ProcessInfo p_process_info) override;
 
 	bool is_on_separate_thread() const { return on_separate_thread; }
