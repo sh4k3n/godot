@@ -5,7 +5,7 @@ SCons spends most of an incremental build walking its dependency graph in
 Python before it can decide anything. For the common case - editing a file in
 the game module - that is pure overhead. This script replays the exact cl / lib
 / link command lines SCons itself emits, selecting work by mtime instead of by
-dependency graph. Timings are recorded in plans/02-build-optimization.md.
+dependency graph.
 
     python tools/fastbuild/fastbuild.py
 
@@ -232,7 +232,7 @@ def capture():
     if missing:
         sys.exit(
             "Could not find the %s line(s) in the SCons dry run.\n"
-            "Log kept at %s - see README.md to capture by hand." % (", ".join(missing), log)
+            "Log kept at %s." % (", ".join(missing), log)
         )
 
     # Incremental linking: see the module docstring for why /OPT:REF must go.
@@ -273,7 +273,7 @@ def lib_command():
     time. That silently breaks twice: a source added later is compiled but
     never archived, so the link fails with unresolved symbols; and a source
     deleted later leaves an orphaned .obj that keeps getting archived, so dead
-    code links in and stale symbols resolve. Both happened during plan 05.
+    code links in and stale symbols resolve.
 
     Rebuilding the list from os.listdir - the same source of truth compilation
     already uses - makes adding and deleting files just work, and keeps the
