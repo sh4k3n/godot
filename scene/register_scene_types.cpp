@@ -253,7 +253,7 @@
 #include "scene/3d/lightmap_gi.h"
 #include "scene/3d/lightmap_probe.h"
 #include "scene/3d/limit_angular_velocity_modifier_3d.h"
-#include "scene/3d/line_3d.h"
+#include "scene/3d/line_base_3d.h"
 #include "scene/3d/look_at_modifier_3d.h"
 #include "scene/3d/marker_3d.h"
 #include "scene/3d/mesh_instance_3d.h"
@@ -678,7 +678,7 @@ void register_scene_types() {
 	GDREGISTER_CLASS(LightmapProbe);
 	GDREGISTER_ABSTRACT_CLASS(Lightmapper);
 
-	GDREGISTER_CLASS(Line3D);
+	GDREGISTER_ABSTRACT_CLASS(LineBase3D);
 	GDREGISTER_CLASS(Trail3D);
 
 	GDREGISTER_CLASS(GPUParticles3D);
@@ -809,7 +809,9 @@ void register_scene_types() {
 	GDREGISTER_CLASS(BlitMaterial);
 
 	// SpriteFrames is needed by both AnimatedSprite2D and AnimatedSprite3D.
+#if !defined(_2D_DISABLED) || !defined(_3D_DISABLED)
 	GDREGISTER_CLASS(SpriteFrames);
+#endif // !defined(_2D_DISABLED) || !defined(_3D_DISABLED)
 
 	/* REGISTER 2D */
 
@@ -1068,9 +1070,13 @@ void register_scene_types() {
 	GDREGISTER_CLASS(ConcavePolygonShape2D);
 #endif // PHYSICS_2D_DISABLED
 
+#endif // _2D_DISABLED
+
 #if !defined(NAVIGATION_2D_DISABLED) || !defined(NAVIGATION_3D_DISABLED)
 	GDREGISTER_CLASS(NavigationMesh);
 #endif // !defined(NAVIGATION_2D_DISABLED) || !defined(NAVIGATION_3D_DISABLED)
+
+#ifndef _2D_DISABLED
 
 #ifndef NAVIGATION_2D_DISABLED
 	GDREGISTER_CLASS(NavigationMeshSourceGeometryData2D);

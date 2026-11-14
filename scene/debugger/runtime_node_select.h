@@ -125,7 +125,6 @@ private:
 #endif
 
 	HashMap<ObjectID, Dictionary> selected_ci_nodes; // The node's ID and its canvas state.
-	int sel_2d_scale = 1;
 
 	Color srect_color;
 	Color srect_locked_color;
@@ -164,7 +163,7 @@ private:
 	void _set_node_type(NodeType p_type);
 	void _set_camera_override_enabled(bool p_enabled);
 
-	void _set_ci_tool(CanvasItemManipulator::Tool p_tool);
+	void _set_ci_tool(CanvasItemManipulator::Tool p_tool, bool p_shift_pressed);
 #ifdef TOOLS_ENABLED
 	void _set_ci_local_space(bool p_enabled);
 #endif
@@ -210,7 +209,7 @@ private:
 	Variant _find_ci_start_callback() const;
 	bool _point_selected_ci_callback(const Variant &p_node, bool p_append);
 	bool _get_selection_ci_callback(Array r_selection);
-	Transform2D _local_transform_callback() const { return Transform2D(); }
+	Transform2D _global_transform_callback() const;
 	Point2 _local_mouse_pos_callback() const;
 	bool _plugin_input_callback(const Ref<InputEvent> &p_event) { return false; }
 

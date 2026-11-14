@@ -3532,8 +3532,8 @@ void EditorInspectorArray::_setup() {
 	max_page = MAX(0, count - 1) / page_length;
 	array_elements.resize(MAX(0, end_array_index - begin_array_index));
 	if (page < 0 || page > max_page) {
-		WARN_PRINT(vformat("Invalid page number %d", page));
 		page = CLAMP(page, 0, max_page);
+		emit_signal("page_change_request", page);
 	}
 
 	Ref<Font> numbers_font;
@@ -5470,6 +5470,12 @@ Object *EditorInspector::get_next_edited_object() {
 	return next_object;
 }
 
+void EditorInspector::cleanup_object() {
+	if (!ObjectDB::get_instance(edited_object_id)) {
+		_clear();
+	}
+}
+
 void EditorInspector::edit(Object *p_object) {
 	Object *object = ObjectDB::get_instance(edited_object_id);
 	if (object == p_object) {
@@ -5776,6 +5782,7 @@ void EditorInspector::_edit_set(const String &p_name, const Variant &p_value, bo
 		bool valid = false;
 		Variant value = object->get(p_name, &valid);
 		Variant::Type type = new_value.get_type();
+		Variant::Type prev_type = value.get_type();
 		if (valid) {
 			if (Object::cast_to<Control>(object) && (p_name == "anchors_preset" || p_name == "layout_mode")) {
 				undo_redo->add_undo_method(object, "_edit_set_state", Object::cast_to<Control>(object)->_edit_get_state());
@@ -5784,7 +5791,7 @@ void EditorInspector::_edit_set(const String &p_name, const Variant &p_value, bo
 			}
 			Node *N = Object::cast_to<Node>(object);
 			bool double_counting = Object::cast_to<Node>(new_value) == N || Object::cast_to<Node>(value) == N;
-			if (N && !double_counting && (type == Variant::OBJECT || type == Variant::ARRAY || type == Variant::DICTIONARY) && value != new_value) {
+			if (N && !double_counting && (type == Variant::OBJECT || type == Variant::ARRAY || type == Variant::DICTIONARY || prev_type == Variant::OBJECT || prev_type == Variant::ARRAY || prev_type == Variant::DICTIONARY) && value != new_value) {
 				undo_redo->add_do_method(EditorNode::get_singleton(), "update_node_reference", value, N, true);
 				undo_redo->add_do_method(EditorNode::get_singleton(), "update_node_reference", new_value, N, false);
 				// Perhaps an inefficient way of updating the resource count.
@@ -5843,7 +5850,7 @@ void EditorInspector::_edit_set(const String &p_name, const Variant &p_value, bo
 			//Setting a Subresource. Since there's possibly multiple Nodes referencing 'r', we need to link them to the Subresource.
 			List<Node *> shared_nodes = EditorNode::get_singleton()->get_resource_node_list(r);
 			for (Node *N : shared_nodes) {
-				if ((type == Variant::OBJECT || type == Variant::ARRAY || type == Variant::DICTIONARY) && value != new_value) {
+				if ((type == Variant::OBJECT || type == Variant::ARRAY || type == Variant::DICTIONARY || prev_type == Variant::OBJECT || prev_type == Variant::ARRAY || prev_type == Variant::DICTIONARY) && value != new_value) {
 					undo_redo->add_do_method(EditorNode::get_singleton(), "update_node_reference", value, N, true);
 					undo_redo->add_do_method(EditorNode::get_singleton(), "update_node_reference", new_value, N, false);
 					// Perhaps an inefficient way of updating the resource count.

@@ -61,7 +61,7 @@ CMD_DIR = os.path.dirname(os.path.abspath(__file__))
 # default before any flag is chosen, silently. Without it on this line a
 # recapture writes a cl.line with no /Zi, objects stop carrying line numbers,
 # and Visual Studio breakpoints quietly stop binding again.
-SCONS_ARGS = "platform=windows target=editor arch=x86_64 d3d12=yes debug_symbols=yes"
+SCONS_ARGS = "platform=windows target=editor arch=x86_64 d3d12=yes debug_symbols=yes voxel_tests=yes"
 
 VCVARS_CANDIDATES = [
     r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat",

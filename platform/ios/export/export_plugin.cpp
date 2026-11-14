@@ -185,7 +185,7 @@ Error EditorExportPlatformIOS::_export_loading_screen_file(const Ref<EditorExpor
 		}
 
 		if (err != OK || splash.is_null() || splash->is_empty()) {
-			splash.instantiate(boot_splash_png);
+			splash.instantiate(boot_splash_png, sizeof(boot_splash_png));
 		}
 
 		// Using same image for both @2x and @3x
@@ -277,16 +277,16 @@ String EditorExportPlatformIOS::_process_config_file_line(const Ref<EditorExport
 
 		// MoltenVK Framework
 	} else if (p_line.contains("$moltenvk_buildfile")) {
-		String value = "9039D3BE24C093AC0020482C /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9039D3BD24C093AC0020482C /* MoltenVK.xcframework */; };";
+		String value = p_config.has_moltenvk ? "9039D3BE24C093AC0020482C /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9039D3BD24C093AC0020482C /* MoltenVK.xcframework */; };" : "";
 		strnew += p_line.replace("$moltenvk_buildfile", value) + "\n";
 	} else if (p_line.contains("$moltenvk_fileref")) {
-		String value = "9039D3BD24C093AC0020482C /* MoltenVK.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = MoltenVK; path = MoltenVK.xcframework; sourceTree = \"<group>\"; };";
+		String value = p_config.has_moltenvk ? "9039D3BD24C093AC0020482C /* MoltenVK.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = MoltenVK; path = MoltenVK.xcframework; sourceTree = \"<group>\"; };" : "";
 		strnew += p_line.replace("$moltenvk_fileref", value) + "\n";
 	} else if (p_line.contains("$moltenvk_buildphase")) {
-		String value = "9039D3BE24C093AC0020482C /* MoltenVK.xcframework in Frameworks */,";
+		String value = p_config.has_moltenvk ? "9039D3BE24C093AC0020482C /* MoltenVK.xcframework in Frameworks */," : "";
 		strnew += p_line.replace("$moltenvk_buildphase", value) + "\n";
 	} else if (p_line.contains("$moltenvk_buildgrp")) {
-		String value = "9039D3BD24C093AC0020482C /* MoltenVK.xcframework */,";
+		String value = p_config.has_moltenvk ? "9039D3BD24C093AC0020482C /* MoltenVK.xcframework */," : "";
 		strnew += p_line.replace("$moltenvk_buildgrp", value) + "\n";
 
 		// Launch Storyboard

@@ -2508,7 +2508,7 @@ void EditorNode::_save_scene_silently() {
 	// errors about parent node being busy setting up children
 	// when Save on Focus Loss kicks in.
 	Node *scene = editor_data.get_edited_scene_root();
-	if (scene && !scene->get_scene_file_path().is_empty() && DirAccess::exists(scene->get_scene_file_path().get_base_dir())) {
+	if (scene && !scene->get_scene_file_path().is_empty() && FileAccess::exists(scene->get_scene_file_path())) {
 		_save_scene(scene->get_scene_file_path());
 		save_editor_layout_delayed();
 	}
@@ -3024,8 +3024,8 @@ void EditorNode::edit_item(Object *p_object, Object *p_editing_owner, bool p_set
 	for (EditorPlugin *plugin : available_plugins) {
 		if (active_plugins[owner_id].has(plugin)) {
 			// Plugin was already active, just change the object and ensure it's visible.
-			plugin->make_visible(true);
 			plugin->edit(p_object);
+			plugin->make_visible(true);
 			if (p_set_current) {
 				plugin->set_current();
 			}
@@ -3034,8 +3034,8 @@ void EditorNode::edit_item(Object *p_object, Object *p_editing_owner, bool p_set
 
 		if (active_plugins.has(plugin->get_instance_id())) {
 			// Plugin is already active, but as self-owning, so it needs a separate check.
-			plugin->make_visible(true);
 			plugin->edit(p_object);
+			plugin->make_visible(true);
 			if (p_set_current) {
 				plugin->set_current();
 			}
@@ -3062,8 +3062,8 @@ void EditorNode::edit_item(Object *p_object, Object *p_editing_owner, bool p_set
 		}
 
 		if (!need_to_add && to_fold.is_empty()) {
-			plugin->make_visible(true);
 			plugin->edit(p_object);
+			plugin->make_visible(true);
 		} else {
 			for (EditorPropertyResource *epres : to_fold) {
 				epres->fold_resource();
@@ -5124,6 +5124,10 @@ Error EditorNode::open_scene(const String &p_scene, bool p_ignore_broken_deps, b
 	ERR_FAIL_NULL_V(new_scene, ERR_BUG);
 
 	_set_current_scene_nocheck(current_scene_idx, ignore_state);
+	if (editor_data.get_edited_scene_count() == 1) {
+		// When opening the first scene, the [empty] scene history is discarded, which may invalidate inspected object.
+		InspectorDock::get_inspector_singleton()->cleanup_object();
+	}
 
 	// When editor plugins load in, they might use node transforms during their own setup, so make sure they're up to date.
 	get_tree()->flush_transform_notifications();
@@ -5924,6 +5928,11 @@ Ref<Texture2D> EditorNode::_get_class_or_script_icon(const String &p_class, cons
 			String base_type;
 			if (ScriptServer::is_global_class(p_class)) {
 				base_type = ScriptServer::get_global_class_native_base(p_class);
+
+				// HACK: Due to a design flaw in `ScriptLanguage::get_global_class_name`, it is not always possible to determine the base class. See GH-122220.
+				if (base_type.is_empty()) {
+					base_type = Object::get_class_static();
+				}
 			} else {
 				Ref<Script> scr = ResourceLoader::load(p_script_path, "Script");
 				if (scr.is_valid()) {
