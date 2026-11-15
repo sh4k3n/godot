@@ -1695,6 +1695,7 @@ void JoltPhysicsServer3D::space_step(RID p_space, real_t p_step) {
 	JoltSpace3D *space = space_owner.get_or_null(p_space);
 	ERR_FAIL_NULL(space);
 	ERR_FAIL_COND(space->is_active());
+	ERR_FAIL_COND_MSG(on_separate_thread, "A space cannot be stepped by hand with physics/3d/run_on_separate_thread on.");
 
 	job_system->pre_step();
 
@@ -1707,6 +1708,7 @@ void JoltPhysicsServer3D::space_flush_queries(RID p_space) {
 	JoltSpace3D *space = space_owner.get_or_null(p_space);
 	ERR_FAIL_NULL(space);
 	ERR_FAIL_COND(space->is_active());
+	ERR_FAIL_COND_MSG(on_separate_thread, "A space cannot be flushed by hand with physics/3d/run_on_separate_thread on.");
 
 	space->call_queries();
 }
