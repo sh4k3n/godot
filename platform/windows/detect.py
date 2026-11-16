@@ -384,7 +384,7 @@ def configure_msvc(env: "SConsEnvironment"):
     if env["arch"] == "x86_32":
         env["x86_libtheora_opt_vc"] = True
 
-    env.Append(CCFLAGS=["/fp:strict"])
+    env.Append(CCFLAGS=["/fp:precise"])
 
     env.AppendUnique(CCFLAGS=["/Gd", "/GR", "/nologo"])
     env.AppendUnique(CCFLAGS=["/utf-8"])  # Force to use Unicode encoding.
